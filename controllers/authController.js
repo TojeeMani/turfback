@@ -12,8 +12,6 @@ const otpStorage = new Map(); // userId -> { otp, email, firstName, userType, ex
 // @access  Public
 exports.register = async (req, res, next) => {
   try {
-    console.log('🔧 Backend: Registration request received:', req.body);
-    
     const {
       firstName,
       lastName,
@@ -73,8 +71,6 @@ exports.register = async (req, res, next) => {
       userData.adminApprovalStatus = 'pending';
     }
 
-    console.log('🔧 Backend: Creating user with data:', userData);
-
     // Create user
     const user = await User.create(userData);
 
@@ -85,9 +81,6 @@ exports.register = async (req, res, next) => {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     const userIdString = user._id.toString();
 
-    console.log('🔧 Backend: Storing OTP for userId:', userIdString);
-    console.log('🔧 Backend: Generated OTP:', otp, 'Type:', typeof otp);
-
     otpStorage.set(userIdString, {
       otp,
       email,
@@ -96,9 +89,7 @@ exports.register = async (req, res, next) => {
       expiresAt
     });
 
-    console.log('🔧 Backend: OTP stored successfully');
 
-    console.log('🔧 Backend: User created and OTP generated');
 
     // Send OTP email
     const emailResult = await sendOTPEmail(email, otp, firstName);
@@ -122,7 +113,6 @@ exports.register = async (req, res, next) => {
       requiresOtpVerification: true
     };
 
-    console.log('🔧 Backend: Sending response:', responseData);
     res.status(201).json(responseData);
   } catch (error) {
     console.log('❌ Backend: Registration error:', error);
@@ -135,25 +125,29 @@ exports.register = async (req, res, next) => {
 // @access  Public
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
 
     // Validate input
-    if (!email) {
+    if (!email && !username) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email'
+        message: 'Please provide email or username',
+        type: 'VALIDATION_ERROR'
       });
     }
 
     if (!password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide password'
+        message: 'Please provide password',
+        type: 'VALIDATION_ERROR'
       });
     }
 
-    // Find user by email
-    const query = { email: email.toLowerCase() };
+    // Find user by email or username
+    const query = email
+      ? { email: email.toLowerCase() }
+      : { username: username.toLowerCase() };
 
     // Check for user
     const user = await User.findOne(query).select('+password');
@@ -161,7 +155,8 @@ exports.login = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid email or password. Please check your credentials and try again.',
+        type: 'INVALID_CREDENTIALS'
       });
     }
 
@@ -171,7 +166,8 @@ exports.login = async (req, res, next) => {
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid email or password. Please check your credentials and try again.',
+        type: 'INVALID_CREDENTIALS'
       });
     }
 
@@ -192,11 +188,22 @@ exports.login = async (req, res, next) => {
     }
 
     // Check admin approval for owners
-    if (user.userType === 'owner' && !user.isApprovedByAdmin) {
-      return res.status(401).json({
-        success: false,
-        message: 'Your account is pending admin approval. You will be notified once approved.'
-      });
+    if (user.userType === 'owner') {
+      if (user.adminApprovalStatus === 'rejected') {
+        return res.status(401).json({
+          success: false,
+          message: 'Your account has been rejected by the admin. Please contact support for more information.',
+          type: 'ACCOUNT_REJECTED'
+        });
+      }
+
+      if (user.adminApprovalStatus === 'pending' || !user.isApprovedByAdmin) {
+        return res.status(401).json({
+          success: false,
+          message: 'Your account is pending admin approval. You will be notified once approved.',
+          type: 'PENDING_APPROVAL'
+        });
+      }
     }
 
     // Generate token
@@ -306,6 +313,25 @@ exports.firebaseAuth = async (req, res, next) => {
           success: false,
           message: 'Account is blocked'
         });
+      }
+
+      // Check admin approval for owners
+      if (user.userType === 'owner') {
+        if (user.adminApprovalStatus === 'rejected') {
+          return res.status(401).json({
+            success: false,
+            message: 'Your account has been rejected by the admin. Please contact support for more information.',
+            type: 'ACCOUNT_REJECTED'
+          });
+        }
+
+        if (user.adminApprovalStatus === 'pending' || !user.isApprovedByAdmin) {
+          return res.status(401).json({
+            success: false,
+            message: 'Your account is pending admin approval. You will be notified once approved.',
+            type: 'PENDING_APPROVAL'
+          });
+        }
       }
 
       // Update last login

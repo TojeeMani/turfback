@@ -1,5 +1,5 @@
 const express = require('express');
-const { body } = require('express-validator');
+const { body, validationResult } = require('express-validator');
 const {
   register,
   login,
@@ -15,6 +15,20 @@ const {
   resendOTP
 } = require('../controllers/authController');
 const { protect } = require('../middleware/auth');
+
+// Validation error handling middleware
+const handleValidationErrors = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      success: false,
+      message: errors.array()[0].msg,
+      type: 'VALIDATION_ERROR',
+      errors: errors.array()
+    });
+  }
+  next();
+};
 
 const router = express.Router();
 
@@ -61,11 +75,25 @@ const registerValidation = [
 ];
 
 const loginValidation = [
-  body('email')
-    .isEmail()
-    .withMessage('Please provide a valid email address')
-    .normalizeEmail(),
-  body('password').notEmpty().withMessage('Password is required')
+  body('password').notEmpty().withMessage('Password is required'),
+  // Custom validation for email OR username
+  body().custom((value, { req }) => {
+    const { email, username } = req.body;
+
+    if (!email && !username) {
+      throw new Error('Please provide either email or username');
+    }
+
+    if (email && username) {
+      throw new Error('Please provide either email or username, not both');
+    }
+
+    if (email && !email.includes('@')) {
+      throw new Error('Please provide a valid email address');
+    }
+
+    return true;
+  })
 ];
 
 const firebaseAuthValidation = [
@@ -80,22 +108,31 @@ const resetPasswordValidation = [
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long')
 ];
 
+// Test route to verify server is running our updated code
+router.get('/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Updated auth routes are working',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Routes
-router.post('/register', registerValidation, register);
-router.post('/login', loginValidation, login);
-router.post('/firebase', firebaseAuthValidation, firebaseAuth);
+router.post('/register', registerValidation, handleValidationErrors, register);
+router.post('/login', loginValidation, handleValidationErrors, login);
+router.post('/firebase', firebaseAuthValidation, handleValidationErrors, firebaseAuth);
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 router.post('/logout', protect, logout);
-router.post('/forgotpassword', forgotPasswordValidation, forgotPassword);
-router.put('/resetpassword/:resettoken', resetPasswordValidation, resetPassword);
-router.post('/resend-verification', forgotPasswordValidation, resendVerification);
+router.post('/forgotpassword', forgotPasswordValidation, handleValidationErrors, forgotPassword);
+router.put('/resetpassword/:resettoken', resetPasswordValidation, handleValidationErrors, resetPassword);
+router.post('/resend-verification', forgotPasswordValidation, handleValidationErrors, resendVerification);
 
 // OTP verification routes
 router.post('/verify-otp', [
   body('userId').notEmpty().withMessage('User ID is required'),
   body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
-], verifyOTP);
+], handleValidationErrors, verifyOTP);
 
 router.post('/resend-otp', [
   body('userId').notEmpty().withMessage('User ID is required')

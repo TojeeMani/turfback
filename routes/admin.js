@@ -1,6 +1,8 @@
 const express = require('express');
 const { body } = require('express-validator');
 const {
+  getAllUsers,
+  getAllOwnersWithStatus,
   getPendingOwners,
   updateOwnerApproval,
   getAllOwners,
@@ -21,6 +23,8 @@ const approvalValidation = [
 ];
 
 // Routes
+router.get('/users', getAllUsers);
+router.get('/all-owners', getAllOwnersWithStatus);
 router.get('/pending-owners', getPendingOwners);
 router.get('/owners', getAllOwners);
 router.get('/owners/:id', getOwnerDetails);
