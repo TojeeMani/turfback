@@ -12,6 +12,7 @@ const otpStorage = new Map(); // userId -> { otp, email, firstName, userType, ex
 // @access  Public
 exports.register = async (req, res, next) => {
   try {
+ 
     const {
       firstName,
       lastName,
@@ -26,10 +27,15 @@ exports.register = async (req, res, next) => {
       businessAddress,
       businessPhone,
       turfCount,
+      turfLocation,
       agreeToTerms,
-      agreeToMarketing
-    } = req.body;
+      agreeToMarketing,
+      govIdFileUrl,
+      ownershipProofFileUrl,
+      businessCertFileUrl
 
+    } = req.body;
+console.log(req.body)
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -63,10 +69,15 @@ exports.register = async (req, res, next) => {
 
     // Add owner-specific fields
     if (userType === 'owner') {
+      userData.govIdFileUrl=govIdFileUrl
+      userData.ownershipProofFileUrl= ownershipProofFileUrl
+    
+      userData.businessCertFileUrl=businessCertFileUrl
       userData.businessName = businessName;
       userData.businessAddress = businessAddress;
       userData.businessPhone = businessPhone;
       userData.turfCount = turfCount;
+      userData.turfLocation = turfLocation;
       userData.isApprovedByAdmin = false;
       userData.adminApprovalStatus = 'pending';
     }
@@ -106,11 +117,17 @@ exports.register = async (req, res, next) => {
 
     const responseData = {
       success: true,
-      message: 'Registration successful! Please check your email for verification OTP.',
+      message: process.env.NODE_ENV === 'development'
+        ? `Registration successful! Development Mode - Your OTP is: ${otp}`
+        : 'Registration successful! Please check your email for verification OTP.',
       userType: user.userType,
       userId: user._id,
       email: user.email,
-      requiresOtpVerification: true
+      requiresOtpVerification: true,
+      ...(process.env.NODE_ENV === 'development' && emailResult.devMode && {
+        devOtp: otp,
+        devMessage: 'In development mode - OTP is shown here for testing'
+      })
     };
 
     res.status(201).json(responseData);
@@ -439,7 +456,13 @@ exports.updateProfile = async (req, res, next) => {
       preferredSports,
       skillLevel,
       location,
-      avatar
+      avatar,
+      // Owner-specific fields
+      businessName,
+      businessAddress,
+      businessPhone,
+      turfCount,
+      turfLocation
     } = req.body;
 
     const user = await User.findById(req.user.id);
@@ -451,36 +474,75 @@ exports.updateProfile = async (req, res, next) => {
       });
     }
 
-    // Update fields
+    // Update common fields
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
-    if (preferredSports) user.preferredSports = preferredSports;
-    if (skillLevel) user.skillLevel = skillLevel;
     if (location) user.location = location;
     if (avatar) user.avatar = avatar;
 
+    // Update player-specific fields
+    if (user.userType === 'player') {
+      if (preferredSports) user.preferredSports = preferredSports;
+      if (skillLevel) user.skillLevel = skillLevel;
+    }
+
+    // Update owner-specific fields
+    if (user.userType === 'owner') {
+      if (businessName) user.businessName = businessName;
+      if (businessAddress) user.businessAddress = businessAddress;
+      if (businessPhone) user.businessPhone = businessPhone;
+      if (turfCount) user.turfCount = turfCount;
+      if (turfLocation) user.turfLocation = turfLocation;
+    }
+
     await user.save();
+
+    // Determine if profile completion is needed based on user type
+    let needsProfileCompletion = false;
+    if (user.userType === 'player') {
+      needsProfileCompletion = !user.phone || user.phone === '0000000000' ||
+                              !user.preferredSports || user.preferredSports.length === 0 ||
+                              !user.skillLevel || !user.location;
+    } else if (user.userType === 'owner') {
+      needsProfileCompletion = !user.phone || user.phone === '0000000000' ||
+                              !user.businessName || !user.businessAddress ||
+                              !user.businessPhone || !user.turfCount ||
+                              !user.location || !user.turfLocation;
+    }
+
+    // Build response object with common fields
+    const responseUser = {
+      id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      userType: user.userType,
+      isEmailVerified: user.isEmailVerified,
+      isApprovedByAdmin: user.isApprovedByAdmin,
+      adminApprovalStatus: user.adminApprovalStatus,
+      avatar: user.avatar,
+      phone: user.phone,
+      location: user.location,
+      needsProfileCompletion
+    };
+
+    // Add user-type specific fields
+    if (user.userType === 'player') {
+      responseUser.preferredSports = user.preferredSports;
+      responseUser.skillLevel = user.skillLevel;
+    } else if (user.userType === 'owner') {
+      responseUser.businessName = user.businessName;
+      responseUser.businessAddress = user.businessAddress;
+      responseUser.businessPhone = user.businessPhone;
+      responseUser.turfCount = user.turfCount;
+      responseUser.turfLocation = user.turfLocation;
+    }
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      user: {
-        id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        email: user.email,
-        userType: user.userType,
-        isEmailVerified: user.isEmailVerified,
-        isApprovedByAdmin: user.isApprovedByAdmin,
-        adminApprovalStatus: user.adminApprovalStatus,
-        avatar: user.avatar,
-        phone: user.phone,
-        preferredSports: user.preferredSports,
-        skillLevel: user.skillLevel,
-        location: user.location,
-        needsProfileCompletion: !user.phone || user.phone === '0000000000' || !user.preferredSports || user.preferredSports.length === 0
-      }
+      user: responseUser
     });
   } catch (error) {
     next(error);
@@ -871,9 +933,15 @@ exports.resendOTP = async (req, res, next) => {
 
     const responseData = {
       success: true,
-      message: 'New OTP sent to your email successfully.',
+      message: process.env.NODE_ENV === 'development'
+        ? `New OTP generated! Development Mode - Your new OTP is: ${otp}`
+        : 'New OTP sent to your email successfully.',
       userId: user._id,
-      email: user.email
+      email: user.email,
+      ...(process.env.NODE_ENV === 'development' && emailResult.devMode && {
+        devOtp: otp,
+        devMessage: 'In development mode - OTP is shown here for testing'
+      })
     };
 
     console.log('🔧 Backend: Sending resend OTP response:', responseData);

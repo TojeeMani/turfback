@@ -13,6 +13,7 @@ const userRoutes = require('./routes/users');
 const turfRoutes = require('./routes/turfs');
 const bookingRoutes = require('./routes/bookings');
 const adminRoutes = require('./routes/admin');
+const uploadRoutes = require('./routes/upload');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -63,6 +64,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/turfs', turfRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // 404 handler
 app.use('*', (req, res) => {
@@ -98,7 +100,7 @@ const connectDB = async () => {
 };
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 const startServer = async () => {
   await connectDB();

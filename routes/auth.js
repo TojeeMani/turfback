@@ -1,5 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const User = require('../models/User');
 const {
   register,
   login,
@@ -37,7 +38,16 @@ const registerValidation = [
   body('firstName').trim().isLength({ min: 2, max: 50 }).withMessage('First name must be between 2 and 50 characters'),
   body('lastName').trim().isLength({ min: 2, max: 50 }).withMessage('Last name must be between 2 and 50 characters'),
   body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
-  body('phone').matches(/^[0-9+\-\s()]+$/).withMessage('Please provide a valid phone number'),
+  body('phone')
+    .matches(/^[0-9+\-\s()]+$/)
+    .withMessage('Please provide a valid phone number')
+    .custom(async (value) => {
+      const existingUser = await User.findOne({ phone: value });
+      if (existingUser) {
+        throw new Error('Phone number already in use');
+      }
+      return true;
+    }),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters long'),
   body('userType').isIn(['player', 'owner']).withMessage('User type must be either player or owner'),
   body('agreeToTerms').equals('true').withMessage('You must agree to terms and conditions'),
@@ -138,4 +148,4 @@ router.post('/resend-otp', [
   body('userId').notEmpty().withMessage('User ID is required')
 ], resendOTP);
 
-module.exports = router; 
+module.exports = router;

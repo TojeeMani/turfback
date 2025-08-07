@@ -149,6 +149,22 @@ const userSchema = new mongoose.Schema({
       return this.userType === 'owner';
     }
   },
+  turfLocation: {
+    type: String,
+    trim: true,
+    required: function() {
+      return this.userType === 'owner';
+    }
+  },
+
+  // Owner Document URLs (Cloudinary)
+  govIdFileUrl: { type: String }, // Government-issued ID proof
+  ownershipProofFileUrl: { type: String }, // Turf ownership proof
+  businessCertFileUrl: { type: String }, // Business registration certificate (optional)
+  gstNumber: { type: String }, // GST number (optional)
+  gstFileUrl: { type: String }, // GST document (optional)
+  bankDetails: { type: String }, // Bank details/UPI (optional)
+  bankProofFileUrl: { type: String }, // Bank proof (optional)
   
   // Account Status
   isActive: {

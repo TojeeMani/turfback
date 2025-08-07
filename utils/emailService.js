@@ -14,8 +14,10 @@ const createTransporter = () => {
 // Send OTP email
 const sendOTPEmail = async (email, otp, firstName) => {
   try {
+    // Try to send real email first
     const transporter = createTransporter();
-    
+    console.log('📧 Attempting to send OTP email to:', email);
+
     const mailOptions = {
       from: process.env.EMAIL_USER || 'your-email@gmail.com',
       to: email,
@@ -54,10 +56,27 @@ const sendOTPEmail = async (email, otp, firstName) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('📧 Email sent successfully:', result.messageId);
+    console.log('✅ Email sent successfully:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Email sending failed:', error);
+
+    // Fallback to development mode if email fails
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 FALLBACK - Using development mode due to email failure');
+      console.log('📧 Would send OTP email to:', email);
+      console.log('🔑 OTP Code:', otp);
+      console.log('👤 Recipient:', firstName);
+
+      return {
+        success: true,
+        messageId: 'dev-fallback-mode',
+        devMode: true,
+        otp: otp,
+        fallback: true
+      };
+    }
+
     return { success: false, error: error.message };
   }
 };
@@ -65,7 +84,9 @@ const sendOTPEmail = async (email, otp, firstName) => {
 // Send resend OTP email
 const sendResendOTPEmail = async (email, otp, firstName) => {
   try {
+    // Try to send real email first
     const transporter = createTransporter();
+    console.log('📧 Attempting to resend OTP email to:', email);
     
     const mailOptions = {
       from: process.env.EMAIL_USER || 'your-email@gmail.com',
@@ -105,10 +126,27 @@ const sendResendOTPEmail = async (email, otp, firstName) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('📧 Resend OTP email sent successfully:', result.messageId);
+    console.log('✅ Resend OTP email sent successfully:', result.messageId);
     return { success: true, messageId: result.messageId };
   } catch (error) {
     console.error('❌ Resend OTP email sending failed:', error);
+
+    // Fallback to development mode if email fails
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 FALLBACK - Using development mode for resend due to email failure');
+      console.log('📧 Would resend OTP email to:', email);
+      console.log('🔑 New OTP Code:', otp);
+      console.log('👤 Recipient:', firstName);
+
+      return {
+        success: true,
+        messageId: 'dev-fallback-resend',
+        devMode: true,
+        otp: otp,
+        fallback: true
+      };
+    }
+
     return { success: false, error: error.message };
   }
 };
